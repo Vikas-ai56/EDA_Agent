@@ -1,0 +1,4 @@
+venv/
+chinook.db
+.idea/
+__pycache__/
