@@ -2,3 +2,4 @@ venv/
 chinook.db
 .idea/
 __pycache__/
+.env
