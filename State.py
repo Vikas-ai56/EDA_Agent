@@ -9,6 +9,7 @@ class ParsedQuestion(BaseModel):
     RelatedTables: list[str] = Field(description=f'''If the required data is not present in this table but present in a referenced table, 
                                       then the referenced table name is stored here.''')
     noun_columns: list[str] 
+    is_relevant: bool = Field(description='Indicates if the question is relevant to the database schema.')
 
 class foreign_relation(BaseModel):
     """
