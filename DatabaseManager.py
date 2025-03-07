@@ -1,21 +1,34 @@
 # Note the execute query function is used to perform data retrieval option and not INSERT , DELETE or UPDATE operations
 
+# Alternative setup of the self.Session object
+"""
+def session(engine):
+    session = sessionmaker(bind=engine)()
+    if engine.dialect.name == "sqlite":
+        session.execute(text('SELECT InitSpatialMetaData()'))
+    yield session
+    session.rollback()
+"""
+
 #-----------------------------------------------------------------------------------------------------------------------------
 # Setup SQLAlchemy
 #-----------------------------------------------------------------------------------------------------------------------------
 
 from sqlalchemy import create_engine, inspect 
-from sqlalchemy.orm import  Session , declarative_base 
+from sqlalchemy.orm import  sessionmaker , declarative_base , Session
 from sqlalchemy import text
 from State import column , foreign_relation
 
 class DatabaseManager:
-    def __init__(self, db_url = "sqlite:///chinook.db"):
+    def __init__(self, db_url="sqlite:///chinook.db"):
         self.db_url = db_url
-        self.engine = create_engine(self.db_url)
-        self.Session = Session(bind=self.engine)
-        self.Base = declarative_base()
-        self.inspector = inspect(self.engine)
+        try:
+            self.engine = create_engine(self.db_url,echo=True)
+            self.Session = sessionmaker(bind=self.engine)
+            self.Base = declarative_base()
+            self.inspector = inspect(self.engine)
+        except Exception as e:
+            raise Exception(f"Error connecting to database: {e}")
     
     def get_schema(self):
         """
@@ -56,7 +69,7 @@ class DatabaseManager:
     
     def execute_query(self,query):
         try:   
-            with self.Session as session:
+            with self.Session() as session: # creating a Session instance
                 result = session.execute(text(query))
                 
                 if result.returns_rows:

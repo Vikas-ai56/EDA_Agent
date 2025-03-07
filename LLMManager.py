@@ -11,7 +11,17 @@ class LLMManager:
 
     def invoke(self, prompt: ChatPromptTemplate, parser , **kwargs) -> str:
         messages = prompt.format_messages(**kwargs)
-        new_llm = self.llm.with_structured_output(parser)
-        response = new_llm.invoke(messages)
-        return response
+        try:
+            if parser is not None:
+                # Use structured output with the provided parser
+                new_llm = self.llm.with_structured_output(parser)
+                response = new_llm.invoke(messages)
+                return response
+            else:
+                # Use regular text output
+                response = self.llm.invoke(messages)
+                return response.content
+                
+        except Exception as e:
+            raise Exception(f"Error during LLM invocation: {e}")
     

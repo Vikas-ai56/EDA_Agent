@@ -3,11 +3,16 @@ from typing_extensions import TypedDict
 import operator
 from pydantic import BaseModel , Field
 
+class RelatedTables(BaseModel):
+    table_name: str
+    column_name: List[str]
+    noun_columns: List[str]
+
 class ParsedQuestion(BaseModel):
     BaseTable: str 
     columns: list[str]
-    RelatedTables: list[str] = Field(description=f'''If the required data is not present in this table but present in a referenced table, 
-                                      then the referenced table name is stored here.''')
+    relevant_tables: list[RelatedTables] = Field(description=f'''If the required data is not present in this table but present in a referenced table, 
+                                                                then the details of that table is stored here.''')
     noun_columns: list[str] 
     is_relevant: bool = Field(description='Indicates if the question is relevant to the database schema.')
 
