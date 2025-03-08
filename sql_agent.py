@@ -47,7 +47,7 @@ class SQLAgent:
             ("human", "===Database schema===\n{schema}\n\n===User question===\n{question}\n\nIdentify relevant tables and columns:")
         ])
 
-        response = self.llm_manager.invoke(prompt, ParsedQuestion , schema=schema, question=question)
+        response = self.llm_manager.invoke(prompt, parser=ParsedQuestion , schema=schema, question=question)
         return {'parsed_question': response}
         
     def get_unique_nouns(self, state: dict) -> dict:
@@ -114,11 +114,11 @@ class SQLAgent:
         query = state['sql_query']
         
         if query == "NOT_RELEVANT":
-            return {"results": "NOT_RELEVANT"}
+            return {"answer": "NOT_RELEVANT"}
 
         try:
             results = self.db_manager.execute_query(query)
-            return {"results": results}
+            return {"answer": results}
         except Exception as e:
             return {"error": str(e)}
 
@@ -220,7 +220,7 @@ class SQLAgent:
             print(f"Error during SQL validation: {e}")  
 
 
-    def fix_sql(db_manager: DatabaseManager, llm_manager:LLMManager, query:str, error_message:str)-> str | None:
+    def fix_sql(self, query:str, error_message:str)-> str | None:
         """
         Attempts to fix an invalid SQL query using the LLM.
 
@@ -231,7 +231,7 @@ class SQLAgent:
         Returns:
             The fixed SQL query, or None if it couldn't be fixed.
         """
-        db_type = db_manager.get_db_type()
+        db_type = self.db_manager.get_db_type()
 
         if db_type in {"sqlite","mysql","postgresql"}:
             pass
@@ -252,13 +252,14 @@ class SQLAgent:
             retries = 0
 
             while retries < 3:
-                response = llm_manager.invoke(prompt,parser=None, query=query, error_message=error_message)
+                response = self.llm_manager.invoke(prompt,parser=None, query=query, error_message=error_message)
                 # Re-validate the fixed query
-                _, validation_result = db_manager.validate_query(response)
+                _, validation_result = self.db_manager.validate_query(response)
                 if validation_result:
-                    return response
+                    return {'sql_query':response}
                 else:
                     retries += 1
+            return 'Cannot write a query that is valid for your prompt'
 
         except Exception as e:
             print(f"Error during LLM-based SQL fixing: {e}")
