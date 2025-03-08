@@ -4,6 +4,7 @@ from DatabaseManager import DatabaseManager
 from LLMManager import LLMManager
 from State import InputState , ParsedQuestion
 from pydantic import BaseModel , Field
+from prompt_templates import sqlite_prompt_template , mysql_prompt_template , postgresql_prompt_template
 
 # -----------------------------------------------------------------------------------------------------------------------------
 # Defining the schema for the parsed question
@@ -84,66 +85,17 @@ class SQLAgent:
         if not parsed_question.is_relevant:
             return {"sql_query": "NOT_RELEVANT", "is_relevant": False}
 
-        schema = db_manager.get_schema() # No need for UUID with local DB
+        schema = db_manager.get_schema()
+        db_type = db_manager.get_db_type()
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", '''You are an AI assistant that generates SQL queries based on user questions,
-            database schema, and unique nouns found in the relevant tables. Generate a valid SQL
-            query to answer the user's question.
-
-    If there is not enough information to write a SQL query, respond with "NOT_ENOUGH_INFO".
-
-    Here are some examples:
-
-    1. What is the top selling product?
-    Answer: SELECT product_name, SUM(quantity) as total_quantity FROM sales WHERE product_name
-    IS NOT NULL AND quantity IS NOT NULL AND product_name != "" AND quantity != "" AND
-    product_name != "N/A" AND quantity != "N/A" GROUP BY product_name ORDER BY total_quantity DESC
-    LIMIT 1
-
-    2. What is the total revenue for each product?
-    Answer: SELECT `product name`, SUM(quantity * price) as total_revenue FROM sales WHERE
-    `product name` IS NOT NULL AND quantity IS NOT NULL AND price IS NOT NULL AND `product name`
-    != "" AND quantity != "" AND price != "" AND `product name` != "N/A" AND quantity != "N/A" AND
-    price != "N/A" GROUP BY `product name`  ORDER BY total_revenue DESC
-
-    3. What is the market share of each product?
-    Answer: SELECT `product name`, SUM(quantity) * 100.0 / (SELECT SUM(quantity) FROM sales)
-    as market_share FROM sales WHERE `product name` IS NOT NULL AND quantity IS NOT NULL AND
-    `product name` != "" AND quantity != "" AND `product name` != "N/A" AND quantity != "N/A"
-    GROUP BY `product name`  ORDER BY market_share DESC
-
-    4. Plot the distribution of income over time
-    Answer: SELECT income, COUNT(*) as count FROM users WHERE income IS NOT NULL AND income != ""
-    AND income != "N/A" GROUP BY income
-
-    THE RESULTS SHOULD ONLY BE IN THE FOLLOWING FORMAT, SO MAKE SURE TO ONLY GIVE TWO OR THREE COLUMNS:
-    [[x, y]]
-    or
-    [[label, x, y]]
-
-    For questions like "plot a distribution of the fares for men and women", count the frequency
-    of each fare and plot it. The x axis should be the fare and the y axis should be the count
-    of people who paid that fare.
-    SKIP ALL ROWS WHERE ANY COLUMN IS NULL or "N/A" or "".
-    Just give the query string. Do not format it. Make sure to use the correct spellings of nouns
-    as provided in unique nouns list. All the table and column names should be enclosed in backticks.
-    '''),
-            ("human", ''' Before generating the SQL query, understand the type of sql databse i.e. whether it is a **SQLlite, MySQL, PostgreSQL, MariaDB etc** type of database and then generate query accordingly to that type of database.
-    ===Database schema:
-    {schema}
-
-    ===User question:
-    {question}
-
-    ===Relevant tables and columns:
-    {parsed_question}
-
-    ===Unique nouns in relevant tables:
-    {unique_nouns}
-
-    Generate SQL query string'''),
-        ])
+        if db_type == "sqlite":
+            prompt = sqlite_prompt_template
+        elif db_type == "mysql":
+            prompt = mysql_prompt_template
+        elif db_type == "postgresql":
+            prompt = postgresql_prompt_template
+        else:
+            return {"sql_query": "UNSUPPORTED_DATABASE"}
 
         try:
             response = llm_manager.invoke(prompt, parser=None , schema=schema, question=question, parsed_question=parsed_question, unique_nouns=unique_nouns)
@@ -156,3 +108,159 @@ class SQLAgent:
         except Exception as e:
             print(f"Error during LLM invocation: {e}")  # Log the error
             return {"sql_query": "ERROR"} # Or some other error indicator
+        
+    def execute_sql(self, state: dict) -> dict:
+        """Execute SQL query and return results."""
+        query = state['sql_query']
+        
+        if query == "NOT_RELEVANT":
+            return {"results": "NOT_RELEVANT"}
+
+        try:
+            results = self.db_manager.execute_query(query)
+            return {"results": results}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def validate_and_fix_sql(self, state: dict) -> dict:
+            """Validate and fix the generated SQL query."""
+            sql_query = state['sql_query']
+
+            if sql_query == "NOT_RELEVANT":
+                return {"sql_query": "NOT_RELEVANT", "sql_valid": False}
+
+            schema = self.db_manager.get_schema()
+
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", '''
+                    You are an AI assistant that validates and fixes SQL queries. Your task is to:
+                    1. Check if the SQL query is valid.
+                    2. Ensure all table and column names are correctly spelled and exist in the schema. All the table and column names should be enclosed in backticks.
+                    3. If there are any issues, fix them and provide the corrected SQL query.
+                    4. If no issues are found, return the original query.
+                
+                    Respond in JSON format with the following structure. Only respond with the JSON:
+                    {{
+                        "valid": boolean,
+                        "issues": string or null,
+                        "corrected_query": string
+                    }}
+                    Respond in JSON format with the following structure. Only respond with the JSON:
+                    {{
+                        "valid": boolean,
+                        "issues": string or null,
+                        "corrected_query": string
+                    }}
+                
+                    For example:
+                    1. {{
+                        "valid": true,
+                        "issues": null,
+                        "corrected_query": "None"
+                    }}
+                
+                    2. {{
+                        "valid": false,
+                        "issues": "Column USERS does not exist",
+                        "corrected_query": "SELECT * FROM \`users\` WHERE age > 25"
+                    }}
+                
+                    3. {{
+                        "valid": false,
+                        "issues": "Column names and table names should be enclosed in backticks if they contain spaces or special characters",
+                        "corrected_query": "SELECT * FROM \`gross income\` WHERE \`age\` > 25"
+                    }}
+                '''),
+
+                ("human", '''
+                    Further Details
+                    ===Database schema===
+                    {schema}
+                
+                    ===Generated SQL query===
+                    {sql_query}
+                    
+                    ===Database type===
+                    {dialect}
+                
+                    Respond in JSON format with the corrected SQL query tailored for this specific database type {dialect}.
+                '''),
+            ])
+
+            output_parser = JsonOutputParser()
+            response = self.llm_manager.invoke(prompt, parser=output_parser, schema=schema, sql_query=sql_query , dialect=self.db_manager.get_db_type())
+            result = output_parser.parse(response)
+
+            if result["valid"] and result["issues"] is None:
+                return {"sql_query": sql_query, "sql_valid": True}
+            else:
+                return {
+                    "sql_query": result["corrected_query"],
+                    "sql_valid": result["valid"],
+                    "sql_issues": result["issues"]
+                }
+            
+# else block within the try block is complete for now
+
+    def validator(self, state: dict) -> dict:
+        """Validate the generated SQL query."""
+        sql_query = state['sql_query']
+
+        if sql_query == "NOT_RELEVANT":
+            return {"valid": False, "issues": "NOT_RELEVANT"}
+
+        try:
+            ret , executable = self.db_manager.validate_query(sql_query)
+            if executable:
+                return 'valid'
+            else:
+                state['error'] = ret
+                return 'invalid'
+        except Exception as e:
+            print(f"Error during SQL validation: {e}")  
+
+
+    def fix_sql(db_manager: DatabaseManager, llm_manager:LLMManager, query:str, error_message:str)-> str | None:
+        """
+        Attempts to fix an invalid SQL query using the LLM.
+
+        Args:
+            query: The invalid SQL query.
+            error_message: The error message from the validator.
+
+        Returns:
+            The fixed SQL query, or None if it couldn't be fixed.
+        """
+        db_type = db_manager.get_db_type()
+
+        if db_type in {"sqlite","mysql","postgresql"}:
+            pass
+        else:
+            return {"sql_query": "UNSUPPORTED_DATABASE"}  # Or raise an exception
+
+        prompt = ChatPromptTemplate.from_messages([
+        ("system", f'''You are an AI assistant that fixes SQL queries. The database type is {db_type}.
+        Here is the error message:
+        {error_message}
+        Fix the following SQL query:
+        {query}
+        Only return the corrected SQL query.
+        '''),
+        ])
+
+        try:
+            retries = 0
+
+            while retries < 3:
+                response = llm_manager.invoke(prompt,parser=None, query=query, error_message=error_message)
+                # Re-validate the fixed query
+                _, validation_result = db_manager.validate_query(response)
+                if validation_result:
+                    return response
+                else:
+                    retries += 1
+
+        except Exception as e:
+            print(f"Error during LLM-based SQL fixing: {e}")
+            return None           
+

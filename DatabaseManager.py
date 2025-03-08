@@ -15,7 +15,7 @@ def session(engine):
 #-----------------------------------------------------------------------------------------------------------------------------
 
 from sqlalchemy import create_engine, inspect 
-from sqlalchemy.orm import  sessionmaker , declarative_base , Session
+from sqlalchemy.orm import  declarative_base , Session
 from sqlalchemy import text
 from State import column , foreign_relation
 
@@ -24,11 +24,14 @@ class DatabaseManager:
         self.db_url = db_url
         try:
             self.engine = create_engine(self.db_url,echo=True)
-            self.Session = sessionmaker(bind=self.engine)
+            self.Session = Session(bind=self.engine)
             self.Base = declarative_base()
             self.inspector = inspect(self.engine)
         except Exception as e:
             raise Exception(f"Error connecting to database: {e}")
+        
+    def get_db_type(self):
+        return self.engine.dialect.name
     
     def get_schema(self):
         """
@@ -67,9 +70,22 @@ class DatabaseManager:
 
         return {'schema':schema}
     
+    def validate_query(self,query):
+        try:
+            with self.Session as session:
+                session.execute(text(query))
+                session.commit()
+                print("Query is valid")
+                return "Query is valid", True
+            
+        except Exception as e:
+            session.rollback()
+            return str(e) , False
+    
+
     def execute_query(self,query):
-        try:   
-            with self.Session() as session: # creating a Session instance
+        try:
+            with self.Session as session: # creating a Session instance
                 result = session.execute(text(query))
                 
                 if result.returns_rows:
@@ -77,9 +93,8 @@ class DatabaseManager:
                     rows = result.fetchall()
                     data = [dict(zip(columns, row)) for row in rows]
                     session.commit()
-                    return {'answer': data}
+                    return data
         
         except Exception as e:
             return {'error': str(e)}
-
 
