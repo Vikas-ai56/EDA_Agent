@@ -10,6 +10,18 @@ class LLMManager:
         self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
     def invoke(self, prompt: ChatPromptTemplate, parser , **kwargs) -> str:
+        """
+        Invokes the language model with the given prompt and optional parser.
+        Args:
+            prompt (ChatPromptTemplate): The prompt template to format and send to the language model.
+            parser: An optional parser for structured output. If None, regular text output is used.
+            **kwargs: Additional keyword arguments to format the prompt.
+        Returns:
+            str: The response from the language model. If a parser is provided, the structured output is returned.
+                 Otherwise, the regular text content is returned.
+        Raises:
+            Exception: If an error occurs during the invocation of the language model.
+        """
         messages = prompt.format_messages(**kwargs)
         try:
             if parser is not None:

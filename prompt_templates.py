@@ -161,18 +161,18 @@ SKIP ALL ROWS WHERE ANY COLUMN IS NULL or 'N/A' or ''.
 Just give the query string. Do not format it. Make sure to use the correct spellings of nouns
 as provided in unique nouns list. All the table and column names should be enclosed in double quotes.
 '''),
-      ("human", '''
-  ===Database schema:
-  {schema}
+    ("human", '''
+===Database schema:
+{schema}
 
-  ===User question:
-  {question}
+===User question:
+{question}
 
-  ===Relevant tables and columns:
-  {parsed_question}
+===Relevant tables and columns:
+{parsed_question}
 
-  ===Unique nouns in relevant tables:
-  {unique_nouns}
+===Unique nouns in relevant tables:
+{unique_nouns}
 
-  Generate SQL query string'''),
+Generate SQL query string'''),
 ])
