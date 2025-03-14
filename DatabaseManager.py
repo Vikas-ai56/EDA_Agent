@@ -10,23 +10,26 @@ def session(engine):
     session.rollback()
 """
 
-#-----------------------------------------------------------------------------------------------------------------------------
-# Setup SQLAlchemy
-#-----------------------------------------------------------------------------------------------------------------------------
-
-from sqlalchemy import create_engine, inspect 
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import  declarative_base , Session
 from sqlalchemy import text
 from State import column , foreign_relation
+import networkx as nx
 
 class DatabaseManager:
+    # -----------------------------------------------------------------------------------------------------------------------------
+    # Setup SQLAlchemy
+    # -----------------------------------------------------------------------------------------------------------------------------
+
     def __init__(self, db_url="sqlite:///chinook.db"):
         self.db_url = db_url
+        self.graph = None
         try:
             self.engine = create_engine(self.db_url,echo=True)
             self.Session = Session(bind=self.engine)
             self.Base = declarative_base()
             self.inspector = inspect(self.engine)
+            self.graph = nx.DiGraph()
         except Exception as e:
             raise Exception(f"Error connecting to database: {e}")
         
@@ -52,7 +55,7 @@ class DatabaseManager:
                 'foreign_keys': []
             }
 
-# Stores the details of the columns in the table (Basically Summary of the column)
+        # Stores the details of the columns in the table (Basically Summary of the column)
 
             for columns in self.inspector.get_columns(table_name):
                 schema[table_name]['columns'].append(column(name = columns['name'],
@@ -61,7 +64,7 @@ class DatabaseManager:
                                                              default = columns['default']))
                 
 
-# Stores the foreign key relationships for the table with other tables
+        # Stores the foreign key relationships for the table with other tables
             
             for fk in self.inspector.get_foreign_keys(table_name):
                 schema[table_name]['foreign_keys'].append(foreign_relation(constrained_column = fk['constrained_columns'],
@@ -69,7 +72,32 @@ class DatabaseManager:
                                                                           referenced_column = fk['referred_columns']))
 
         return {'schema':schema}
-    
+
+    # -----------------------------------------------------------------------------------------------------------------------------
+    # Setup graph and extract the relationships between tables 
+    # The graph is a directed graph which allows the llm to understand the relationships between tables better
+    # -----------------------------------------------------------------------------------------------------------------------------
+
+    def get_schema_graph(self):
+        graph = nx.DiGraph()
+        schema_dict = self.get_schema() 
+        schema_dict = schema_dict['schema']
+
+        for table_name, table_data in schema_dict.items():
+            graph.add_node(table_name, type="table", **table_data)
+
+            # Add column nodes and edges
+            for col in table_data["columns"]:
+                column_name = f"{table_name}.{col.name}"  # Use dictionary access
+                graph.add_node(column_name, **col.dict()) 
+                graph.add_edge(table_name, column_name, relationship="has_column")
+            # Add foreign key edges
+            for fk in table_data["foreign_keys"]:
+                graph.add_edge(table_name, fk.referenced_table, relationship="foreign_key",
+                                constrained_columns=fk.constrained_column,  # Store as list
+                                referred_columns=fk.referenced_column) 
+        return graph
+
     def validate_query(self,query):
         try:
             with self.Session as session:

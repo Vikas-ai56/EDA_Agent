@@ -145,6 +145,7 @@ class SQLAgent:
     def fix_sql(self, query:str, error_message:str)-> str | None:
         """
         Attempts to fix an invalid SQL query using the LLM.
+        Has a maximum of 3 retries in order to avoid a recursive loop and reduce cost.
 
         Args:
             query: The invalid SQL query.

@@ -8,3 +8,4 @@ langgraph
 pydantic
 fastapi
 langchain_openai
+networkx
