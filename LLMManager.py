@@ -4,12 +4,11 @@ from dotenv import load_dotenv
 import os
 
 os.getenv("OPENAI_API_KEY")
-
 class LLMManager:
     def __init__(self):
         self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-    def invoke(self, prompt: ChatPromptTemplate, parser , **kwargs) -> str:
+    def invoke(self, prompt: ChatPromptTemplate, parser=None , **kwargs) -> str:
         """
         Invokes the language model with the given prompt and optional parser.
         Args:

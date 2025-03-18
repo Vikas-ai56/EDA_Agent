@@ -96,7 +96,7 @@ class DatabaseManager:
                 graph.add_edge(table_name, fk.referenced_table, relationship="foreign_key",
                                 constrained_columns=fk.constrained_column,  # Store as list
                                 referred_columns=fk.referenced_column) 
-        return graph
+        return {'graph':graph}
 
     def validate_query(self,query):
         try:
@@ -126,3 +126,4 @@ class DatabaseManager:
         except Exception as e:
             return {'error': str(e)}
 
+    
