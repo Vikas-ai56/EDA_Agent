@@ -52,7 +52,6 @@ ML
      ├── workflow_manager.py
      ├── graph_instructions.py
      ├── prompt_templates.py
-     ├── sqlalchemy.md
      └── ...
 ```
 
