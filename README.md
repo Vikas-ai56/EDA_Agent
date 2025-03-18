@@ -1,4 +1,4 @@
-# EDA Agent Prototype
+# EDA Agent 
 
 This repository contains a prototype of a basic workflow system that generates and validates SQL queries, formats results, and recommends visualizations. Please note that the code may have bugs or incomplete functionalities.
 
