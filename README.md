@@ -39,9 +39,8 @@ Make sure your `.env` file is not tracked by version control by checking the `.g
 ## 2. Project Structure
 
 ```
-ML
- └── EDA_agent
-     ├── .env.example
+EDA_agent
+ └── ├── .env.example
      ├── .gitignore
      ├── requirements.txt
      ├── DatabaseManager.py
